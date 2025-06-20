@@ -191,6 +191,46 @@ func (es *ElasticSearch) BulkAddToIndex(docs map[string]interface{}) {
 	}
 }
 
+func (es *ElasticSearch) LexicalSearch(
+	query string,
+	topHits int,
+	ids []string,
+	skip int,
+)map[string]interface{}{
+	var buf bytes.Buffer
+	json.NewEncoder(&buf).Encode(map[string]interface{}{"index":es.IndexName, "search_type": "dfs_query_then_fetch"}) // metadata
+	//body
+	basic_query := map[string]interface{}{
+		"multi_match": map[string]interface{}{
+			"query": query,
+			"type": "best_fields",
+			"fields":      []string{es.TitleKey, es.TextKey},
+			"tie_breaker": 0.5,
+		}
+	}
+	if len(ids) > 0{
+		json.NewEncoder(&buf).Encode(map[string]interface{}{
+			"_source": false,
+			"query": map[string]interface{}{
+				"bool": map[string]interface{}{
+					"must": basic_query,
+					"filter": map[string]interface{}{
+						"ids": map[string]interface{}{"values": ids}
+					},
+				},
+			},
+			"size": skip + topHits,
+		})
+	}else{
+		json.NewEncoder(&buf).Encode(map[string]interface{}{
+			"_source": false,
+			"query": basic_query,
+			"size" : skip + topHits,
+		})
+	}
+	
+}
+
 func (es *ElasticSearch) LexicalMSearch(
 	queries []string,
 	topHits int,
