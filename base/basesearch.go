@@ -7,7 +7,7 @@ import (
 	"log"
 	"os"
 	"time"
-
+	"path/filepath"
 	"github.com/elastic/go-elasticsearch/v9"
 	"github.com/elastic/go-elasticsearch/v9/esapi"
 	"github.com/schollz/progressbar/v3"
@@ -415,8 +415,15 @@ func (bm25 *BM25Search) Search(
 	return bm25.Results
 }
 
-func SaveResultsAsJSON(results map[string]map[string]float64, filepath string) {
-	file, err := os.Create(filepath)
+func SaveResultsAsJSON(results map[string]map[string]float64, file_path string) {
+	dir := filepath.Dir(file_path)
+	err := os.MkdirAll(dir, os.ModePerm)
+	if err!=nil{
+		log.Fatalf("Error creating path: %v", err)
+	}
+
+	file, err := os.Create(file_path)
+	
 	if err != nil {
 		log.Fatalf("Error creating file: %v", err)
 	}
