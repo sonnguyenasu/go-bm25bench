@@ -88,16 +88,26 @@ func NewElasticSearch(es_credentials map[string]interface{}) ElasticSearch {
 }
 
 func (es *ElasticSearch) delete_index() {
-	// Delete
-	res_delete, err := es.ES.Indices.Delete([]string{es.IndexName})
-	if err != nil {
-		log.Fatalf("Error deleting index: %s", err)
+	// check if exist
+	res, err := es.ES.Indices.Exists([]string{es.IndexName})
+	if err != nil{
+		log.Fatalf("Error checking index existence: %s", err)
 	}
-	defer res_delete.Body.Close()
-	if res_delete.IsError() {
-		log.Printf("Error deleting index: %s", res_delete.String())
-	} else {
-		log.Println("Index deleted successfully")
+	defer res.Body.Close()
+	if res.StatusCode == 200{
+		// Delete
+		res_delete, err := es.ES.Indices.Delete([]string{es.IndexName})
+		if err != nil {
+			log.Fatalf("Error deleting index: %s", err)
+		}
+		defer res_delete.Body.Close()
+		if res_delete.IsError() {
+			log.Printf("Error deleting index: %s", res_delete.String())
+		} else {
+			log.Println("Index deleted successfully")
+		}
+	}else{
+		log.Println("Index not exists. Skipping delete.")
 	}
 }
 
