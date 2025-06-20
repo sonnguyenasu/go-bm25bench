@@ -1,3 +1,4 @@
-results/*
-dataset/*
+results/*.json
+dataset/*/*
+dataset/*.zip
 __pycache__
