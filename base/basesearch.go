@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
-	"time"
 	"path/filepath"
+	"time"
+
 	"github.com/elastic/go-elasticsearch/v9"
 	"github.com/elastic/go-elasticsearch/v9/esapi"
 	"github.com/schollz/progressbar/v3"
@@ -90,11 +92,11 @@ func NewElasticSearch(es_credentials map[string]interface{}) ElasticSearch {
 func (es *ElasticSearch) delete_index() {
 	// check if exist
 	res, err := es.ES.Indices.Exists([]string{es.IndexName})
-	if err != nil{
+	if err != nil {
 		log.Fatalf("Error checking index existence: %s", err)
 	}
 	defer res.Body.Close()
-	if res.StatusCode == 200{
+	if res.StatusCode == 200 {
 		// Delete
 		res_delete, err := es.ES.Indices.Delete([]string{es.IndexName})
 		if err != nil {
@@ -106,7 +108,7 @@ func (es *ElasticSearch) delete_index() {
 		} else {
 			log.Println("Index deleted successfully")
 		}
-	}else{
+	} else {
 		log.Println("Index not exists. Skipping delete.")
 	}
 }
@@ -196,39 +198,59 @@ func (es *ElasticSearch) LexicalSearch(
 	topHits int,
 	ids []string,
 	skip int,
-)map[string]interface{}{
+) map[string]interface{} {
 	var buf bytes.Buffer
-	json.NewEncoder(&buf).Encode(map[string]interface{}{"index":es.IndexName, "search_type": "dfs_query_then_fetch"}) // metadata
+	// json.NewEncoder(&buf).Encode(map[string]interface{}{"index": es.IndexName, "search_type": "dfs_query_then_fetch"}) // metadata
 	//body
 	basic_query := map[string]interface{}{
 		"multi_match": map[string]interface{}{
-			"query": query,
-			"type": "best_fields",
+			"query":       query,
+			"type":        "best_fields",
 			"fields":      []string{es.TitleKey, es.TextKey},
 			"tie_breaker": 0.5,
-		}
+		},
 	}
-	if len(ids) > 0{
+	if len(ids) > 0 {
+		fmt.Println("Call with id filter")
 		json.NewEncoder(&buf).Encode(map[string]interface{}{
 			"_source": false,
 			"query": map[string]interface{}{
 				"bool": map[string]interface{}{
 					"must": basic_query,
 					"filter": map[string]interface{}{
-						"ids": map[string]interface{}{"values": ids}
+						"ids": map[string]interface{}{"values": ids},
 					},
 				},
 			},
 			"size": skip + topHits,
 		})
-	}else{
+	} else {
+		fmt.Println("Call without id filter")
 		json.NewEncoder(&buf).Encode(map[string]interface{}{
 			"_source": false,
-			"query": basic_query,
-			"size" : skip + topHits,
+			"query":   basic_query,
+			"size":    skip + topHits,
 		})
 	}
-	
+	req := esapi.SearchRequest{
+		Index:      []string{es.IndexName},
+		Body:       bytes.NewReader(buf.Bytes()),
+		SearchType: "dfs_query_then_fetch",
+	}
+	res, err := req.Do(context.Background(), es.ES)
+	if err != nil {
+		log.Fatalf("Error performing search: %s", err)
+	}
+	defer res.Body.Close()
+	var r map[string]interface{}
+	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
+		log.Fatalf("Error parsing the response Body: %s", err)
+	}
+	// result := map[string]interface{}{}
+	hits := r["hits"].(map[string]interface{})["hits"].([]interface{})[skip:]
+	result := es.HitTemplate(r, hits)
+	// fmt.Println("Result of search: ")
+	return result
 }
 
 func (es *ElasticSearch) LexicalMSearch(
@@ -458,12 +480,12 @@ func (bm25 *BM25Search) Search(
 func SaveResultsAsJSON(results map[string]map[string]float64, file_path string) {
 	dir := filepath.Dir(file_path)
 	err := os.MkdirAll(dir, os.ModePerm)
-	if err!=nil{
+	if err != nil {
 		log.Fatalf("Error creating path: %v", err)
 	}
 
 	file, err := os.Create(file_path)
-	
+
 	if err != nil {
 		log.Fatalf("Error creating file: %v", err)
 	}
